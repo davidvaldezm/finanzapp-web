@@ -2,14 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import api from "../api/client";
 import { API_URL } from "../config";
-
-type User = {
-  id: number;
-  uuid: string;
-  name: string;
-  email: string;
-  role: "user" | "admin";
-};
+import type { User } from "../types";
 
 type AuthContextType = {
   user: User | null;

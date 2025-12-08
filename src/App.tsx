@@ -5,6 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import CategoriesPage from "./pages/CategoriesPage";
+import TransactionsPage from "./pages/TransactionsPage";
 import AppLayout from "./components/AppLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -24,10 +25,7 @@ const App: React.FC = () => {
       >
         <Route index element={<DashboardPage />} />
         <Route path="categories" element={<CategoriesPage />} />
-        <Route
-          path="transactions"
-          element={<div>Transacciones (pendiente de implementar)</div>}
-        />
+        <Route path="transactions" element={<TransactionsPage />} />
       </Route>
 
       <Route path="/" element={<Navigate to="/login" replace />} />
