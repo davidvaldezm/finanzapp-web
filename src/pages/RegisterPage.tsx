@@ -1,8 +1,7 @@
-// src/pages/RegisterPage.tsx
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import LoginPage from "./LoginPage";
+import { AuthLayout } from "./LoginPage";
 
 const RegisterPage: React.FC = () => {
   const { register } = useAuth();
@@ -28,11 +27,6 @@ const RegisterPage: React.FC = () => {
     }
   };
 
-  // Reusar el mismo AuthLayout de LoginPage
-  // (lo exportamos por defecto en LoginPage, así que copié la definición ahí)
-  // Aquí simplemente le pedimos a Codex que copie el AuthLayout o lo duplicas.
-  const AuthLayout = (LoginPage as any).AuthLayout || ((props: any) => <div>{props.children}</div>);
-
   return (
     <AuthLayout title="Crear cuenta">
       <form onSubmit={handleSubmit}>
@@ -47,7 +41,7 @@ const RegisterPage: React.FC = () => {
           required
         />
 
-        <label>Contraseña</label>
+        <label>Contrasena</label>
         <input
           type="password"
           value={password}
@@ -63,7 +57,7 @@ const RegisterPage: React.FC = () => {
       </form>
 
       <p style={{ marginTop: 12, fontSize: 14 }}>
-        ¿Ya tienes cuenta? <Link to="/login">Inicia sesión</Link>
+        Ya tienes cuenta? <Link to="/login">Inicia sesion</Link>
       </p>
     </AuthLayout>
   );

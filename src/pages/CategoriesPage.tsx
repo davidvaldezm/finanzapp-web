@@ -1,6 +1,7 @@
 // src/pages/CategoriesPage.tsx
 import React, { useEffect, useState } from "react";
 import api from "../api/client";
+import { API_URL } from "../config";
 
 type Category = {
   id: number;
@@ -20,11 +21,11 @@ const CategoriesPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get<Category[]>("/api/categories");
+      const res = await api.get<Category[]>(`${API_URL}/categories`);
       setCategories(res.data);
     } catch (err: any) {
       console.error(err);
-      setError(err?.response?.data?.message || "Error al cargar categorías");
+      setError(err?.response?.data?.message || "Error al cargar categorias");
     } finally {
       setLoading(false);
     }
@@ -36,9 +37,9 @@ const CategoriesPage: React.FC = () => {
 
   return (
     <div>
-      <h1 style={{ marginTop: 0 }}>Categorías</h1>
+      <h1 style={{ marginTop: 0 }}>Categorias</h1>
       <p style={{ color: "#9ca3af", fontSize: 14 }}>
-        Lista de categorías (incluye globales y las tuyas).
+        Lista de categorias (incluye globales y las tuyas).
       </p>
 
       <button
@@ -62,7 +63,7 @@ const CategoriesPage: React.FC = () => {
 
       <div style={{ marginTop: 8 }}>
         {categories.length === 0 && !loading && (
-          <div style={{ color: "#9ca3af" }}>Sin categorías todavía.</div>
+          <div style={{ color: "#9ca3af" }}>Sin categorias todavia.</div>
         )}
         {categories.map((cat) => (
           <div
@@ -86,8 +87,7 @@ const CategoriesPage: React.FC = () => {
                   padding: "2px 8px",
                   borderRadius: 999,
                   border: "1px solid",
-                  borderColor:
-                    cat.type === "income" ? "#4ade80" : "#f97373",
+                  borderColor: cat.type === "income" ? "#4ade80" : "#f97373",
                   color: cat.type === "income" ? "#4ade80" : "#f97373",
                   marginLeft: 6,
                 }}
@@ -102,7 +102,7 @@ const CategoriesPage: React.FC = () => {
                     color: "#9ca3af",
                   }}
                 >
-                  · default
+                  - default
                 </span>
               ) : null}
             </div>

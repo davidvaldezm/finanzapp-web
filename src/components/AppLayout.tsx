@@ -1,4 +1,3 @@
-// src/components/AppLayout.tsx
 import React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -23,7 +22,7 @@ const AppLayout: React.FC = () => {
         <div style={{ marginBottom: 24 }}>
           <h2 style={{ margin: 0, fontSize: 18 }}>FinanzApp</h2>
           <div style={{ fontSize: 12, color: "#9ca3af" }}>
-            {user?.name} · {user?.email}
+            {user?.name} - {user?.email}
           </div>
         </div>
 
@@ -31,7 +30,7 @@ const AppLayout: React.FC = () => {
           <NavLink to="/app" label="Dashboard" current={location.pathname === "/app"} />
           <NavLink
             to="/app/categories"
-            label="Categorías"
+            label="Categorias"
             current={location.pathname.startsWith("/app/categories")}
           />
           <NavLink
@@ -54,7 +53,7 @@ const AppLayout: React.FC = () => {
             fontWeight: 600,
           }}
         >
-          Cerrar sesión
+          Cerrar sesion
         </button>
       </aside>
 

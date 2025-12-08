@@ -1,6 +1,7 @@
 // src/context/AuthContext.tsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import api from "../api/client";
+import { API_URL } from "../config";
 
 type User = {
   id: number;
@@ -19,13 +20,13 @@ type AuthContextType = {
   logout: () => void;
 };
 
+const TOKEN_KEY = "finanzapp_token";
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(
-    localStorage.getItem("finanzapp_token")
-  );
+  const [token, setToken] = useState<string | null>(localStorage.getItem(TOKEN_KEY));
   const [loading, setLoading] = useState<boolean>(!!token);
 
   // Cargar /auth/me si hay token guardado
@@ -36,11 +37,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       try {
-        const res = await api.get("/api/auth/me");
+        const res = await api.get(`${API_URL}/auth/me`);
         setUser(res.data);
       } catch (err) {
         console.error("Failed to load me", err);
-        localStorage.removeItem("finanzapp_token");
+        localStorage.removeItem(TOKEN_KEY);
         setToken(null);
       } finally {
         setLoading(false);
@@ -50,25 +51,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [token]);
 
   const login = async (email: string, password: string) => {
-    const res = await api.post("/api/auth/login", { email, password });
+    const res = await api.post(`${API_URL}/auth/login`, { email, password });
     const { user, token } = res.data;
     setUser(user);
     setToken(token);
-    localStorage.setItem("finanzapp_token", token);
+    localStorage.setItem(TOKEN_KEY, token);
   };
 
   const register = async (name: string, email: string, password: string) => {
-    const res = await api.post("/api/auth/register", { name, email, password });
+    const res = await api.post(`${API_URL}/auth/register`, { name, email, password });
     const { user, token } = res.data;
     setUser(user);
     setToken(token);
-    localStorage.setItem("finanzapp_token", token);
+    localStorage.setItem(TOKEN_KEY, token);
   };
 
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem("finanzapp_token");
+    localStorage.removeItem(TOKEN_KEY);
   };
 
   return (
