@@ -1,71 +1,86 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
+// src/pages/DashboardPage.tsx
+import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import { getSummary, getCategories, getTransactions } from "../lib/api";
+import type { Category, Transaction } from "../types";
+
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
   ResponsiveContainer,
-  Tooltip,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from "recharts";
-import { useAuth } from "../context/AuthContext";
-import { getCategories, getSummary, getTransactions } from "../lib/api";
-import type { Category, Summary, Transaction } from "../types";
 
-const currency = new Intl.NumberFormat("es-MX", {
-  style: "currency",
-  currency: "MXN",
-  minimumFractionDigits: 2,
-});
+type SummaryState = {
+  income: number;
+  expense: number;
+  balance: number;
+};
 
-const DashboardPage: React.FC = () => {
+type CategoryTotals = {
+  categoryId: number | null;
+  name: string;
+  total: number;
+  color?: string;
+};
+
+const COLORS = [
+  "#22c55e",
+  "#6366f1",
+  "#f97316",
+  "#ec4899",
+  "#14b8a6",
+  "#eab308",
+  "#a855f7",
+  "#3b82f6",
+];
+
+const getCurrentMonth = () => new Date().toISOString().slice(0, 7); // YYYY-MM
+
+export default function DashboardPage() {
   const { user } = useAuth();
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [chartData, setChartData] = useState<{ name: string; total: number }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [month, setMonth] = useState<string>(getCurrentMonth());
+  const [summary, setSummary] = useState<SummaryState>({
+    income: 0,
+    expense: 0,
+    balance: 0,
+  });
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const month = useMemo(() => format(new Date(), "yyyy-MM"), []);
-
+  // Cargar datos cuando cambie el mes
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setError(null);
       try {
-        const [cats] = await Promise.all([getCategories().catch(() => [])]);
+        const [summaryRes, catsRes, txRes] = await Promise.all([
+          getSummary(month),
+          getCategories(),
+          getTransactions({ month, kind: "all" }),
+        ]);
 
-        // Intentar endpoint de resumen
-        const remoteSummary = await getSummary(month).catch(() => null);
+        const income = Number(summaryRes.incomes || 0);
+        const expense = Number(summaryRes.expenses || 0);
+        const balance =
+          summaryRes.balance !== undefined
+            ? Number(summaryRes.balance)
+            : income - expense;
 
-        if (remoteSummary) {
-          setSummary({
-            ...remoteSummary,
-            balance:
-              remoteSummary.balance ??
-              (remoteSummary.incomes || 0) - (remoteSummary.expenses || 0),
-          });
-
-          const byCat =
-            remoteSummary.byCategory?.map((item) => ({
-              name:
-                cats.find((c) => `${c.id}` === `${item.categoryId}`)?.name ||
-                item.category ||
-                "Sin categoria",
-              total: item.total,
-            })) || [];
-          setChartData(byCat);
-          return;
-        }
-
-        // Fallback: agrupar transacciones del mes
-        const transactions = await getTransactions({ month }).catch(() => []);
-        const computed = buildSummaryFromTransactions(transactions, cats);
-        setSummary(computed.summary);
-        setChartData(computed.byCategory);
-      } catch (err: any) {
+        setSummary({ income, expense, balance });
+        setCategories(catsRes);
+        setTransactions(txRes);
+      } catch (err) {
         console.error(err);
-        setError(err?.response?.data?.message || "No se pudo cargar el resumen");
+        setError("Error al cargar los datos del dashboard");
       } finally {
         setLoading(false);
       }
@@ -74,123 +89,208 @@ const DashboardPage: React.FC = () => {
     load();
   }, [month]);
 
-  const loadingContent = loading ? (
-    <div style={{ marginTop: 12, color: "#9ca3af" }}>Cargando...</div>
-  ) : null;
+  // Datos para gráfica de barras (Ingresos vs Gastos)
+  const barData = useMemo(
+    () => [
+      { name: "Ingresos", monto: summary.income },
+      { name: "Gastos", monto: summary.expense },
+    ],
+    [summary.income, summary.expense]
+  );
+
+  // Agrupar gastos por categoría para el pie chart
+  const expensesByCategory = useMemo<CategoryTotals[]>(() => {
+    const map = new Map<number | null, number>();
+
+    transactions
+      .filter((t) => t.type === "expense")
+      .forEach((t) => {
+        // soporta categoryId o category_id
+        const catIdRaw: any = (t as any).categoryId ?? (t as any).category_id;
+        const catId =
+          catIdRaw === undefined || catIdRaw === null
+            ? null
+            : Number(catIdRaw);
+
+        const prev = map.get(catId) ?? 0;
+        map.set(catId, prev + Number(t.amount));
+      });
+
+    const items: CategoryTotals[] = Array.from(map.entries()).map(
+      ([categoryId, total]) => {
+        const cat =
+          categoryId === null
+            ? undefined
+            : categories.find((c) => c.id === categoryId);
+        return {
+          categoryId,
+          name: cat?.name ?? "Sin categoría",
+          total,
+          color: (cat as any)?.color,
+        };
+      }
+    );
+
+    // quitar categorías con total 0
+    return items.filter((i) => i.total > 0);
+  }, [transactions, categories]);
 
   return (
-    <div>
-      <h1 style={{ marginTop: 0 }}>Dashboard</h1>
-      <p style={{ color: "#9ca3af" }}>
-        Bienvenido, <strong>{user?.name}</strong>.
-      </p>
+    <div className="px-8 py-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-bold text-slate-100">Dashboard</h1>
+          <p className="text-slate-400 mt-1">
+            Bienvenido,{" "}
+            <span className="font-semibold text-slate-100">
+              {user?.name ?? user?.email ?? "usuario"}
+            </span>
+            .
+          </p>
+        </div>
 
-      {loadingContent}
+        <div className="flex flex-col items-start md:items-end gap-1">
+          <label className="text-sm text-slate-400">Mes</label>
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="bg-slate-800 text-slate-100 rounded-md px-3 py-2 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+      </div>
+
       {error && (
-        <div style={{ color: "#f97373", marginTop: 8 }}>
-          {error} - intenta recargar la pagina.
+        <div className="bg-red-500/10 border border-red-500 text-red-200 px-4 py-2 rounded-lg text-sm">
+          {error}
         </div>
       )}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 16,
-          marginTop: 16,
-        }}
-      >
-        <Card title="Ingresos del mes" value={currency.format(summary?.incomes || 0)} />
-        <Card title="Gastos del mes" value={currency.format(summary?.expenses || 0)} />
-        <Card title="Balance" value={currency.format(summary?.balance || 0)} />
+      {/* Tarjetas resumen */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-slate-900/80 rounded-2xl p-5 border border-slate-800">
+          <p className="text-sm text-slate-400">Ingresos del mes</p>
+          <p className="mt-2 text-2xl font-semibold text-emerald-400">
+            ${summary.income.toFixed(2)}
+          </p>
+        </div>
+
+        <div className="bg-slate-900/80 rounded-2xl p-5 border border-slate-800">
+          <p className="text-sm text-slate-400">Gastos del mes</p>
+          <p className="mt-2 text-2xl font-semibold text-rose-400">
+            ${summary.expense.toFixed(2)}
+          </p>
+        </div>
+
+        <div className="bg-slate-900/80 rounded-2xl p-5 border border-slate-800">
+          <p className="text-sm text-slate-400">Balance</p>
+          <p
+            className={`mt-2 text-2xl font-semibold ${
+              summary.balance >= 0 ? "text-emerald-400" : "text-rose-400"
+            }`}
+          >
+            ${summary.balance.toFixed(2)}
+          </p>
+        </div>
       </div>
 
-      <div
-        style={{
-          marginTop: 24,
-          background: "#020617",
-          borderRadius: 16,
-          border: "1px solid #1f2937",
-          padding: 16,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <h3 style={{ margin: 0 }}>Gastos por categoria ({month})</h3>
-          {loading && <span style={{ color: "#9ca3af", fontSize: 13 }}>Cargando...</span>}
+      {/* Gráficas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Barra Ingresos vs Gastos */}
+        <div className="bg-slate-900/80 rounded-2xl p-5 border border-slate-800">
+          <h2 className="text-lg font-semibold text-slate-100 mb-4">
+            Ingresos vs gastos ({month})
+          </h2>
+          {loading ? (
+            <p className="text-slate-400 text-sm">Cargando...</p>
+          ) : (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barData}>
+                  <XAxis dataKey="name" stroke="#9ca3af" />
+                  <YAxis stroke="#9ca3af" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#020617",
+                      border: "1px solid #1e293b",
+                    }}
+                    formatter={(value: any) =>
+                      `$${Number(value).toFixed(2)}`
+                    }
+                  />
+                  <Bar
+                    dataKey="monto"
+                    radius={[8, 8, 0, 0]}
+                    fill="#22c55e"
+                    // color para gastos
+                    label={{ position: "top", fill: "#e5e7eb" }}
+                  >
+                    {barData.map((entry, index) => (
+                      <Cell
+                        key={entry.name}
+                        fill={index === 0 ? "#22c55e" : "#f97373"}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
-        {chartData.length === 0 && !loading ? (
-          <div style={{ color: "#9ca3af", marginTop: 8 }}>
-            No hay datos de gastos en este mes.
-          </div>
-        ) : (
-          <div style={{ height: 260 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="name" tick={{ fill: "#9ca3af", fontSize: 12 }} />
-                <YAxis tick={{ fill: "#9ca3af", fontSize: 12 }} />
-                <Tooltip
-                  contentStyle={{ background: "#0b1225", border: "1px solid #1f2937" }}
-                  formatter={(value: number) => currency.format(value)}
-                />
-                <Bar dataKey="total" fill="#22c55e" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+
+        {/* Pie gastos por categoría */}
+        <div className="bg-slate-900/80 rounded-2xl p-5 border border-slate-800">
+          <h2 className="text-lg font-semibold text-slate-100 mb-4">
+            Gastos por categoría ({month})
+          </h2>
+
+          {loading ? (
+            <p className="text-slate-400 text-sm">Cargando...</p>
+          ) : expensesByCategory.length === 0 ? (
+            <p className="text-slate-400 text-sm">
+              No hay datos de gastos en este mes.
+            </p>
+          ) : (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={expensesByCategory}
+                    dataKey="total"
+                    nameKey="name"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={4}
+                  >
+                    {expensesByCategory.map((entry, index) => (
+                      <Cell
+                        key={`cell-${entry.categoryId}-${index}`}
+                        fill={entry.color || COLORS[index % COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#020617",
+                      border: "1px solid #1e293b",
+                    }}
+                    formatter={(value: any, _name, item: any) => [
+                      `$${Number(value).toFixed(2)}`,
+                      item?.payload?.name,
+                    ]}
+                  />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
+                    wrapperStyle={{ color: "#e5e7eb", fontSize: 12 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
-};
-
-const buildSummaryFromTransactions = (transactions: Transaction[], cats: Category[]) => {
-  const expenses = transactions
-    .filter((t) => (t.kind || t.type) === "expense")
-    .reduce((sum, t) => sum + (t.amount || 0), 0);
-  const incomes = transactions
-    .filter((t) => (t.kind || t.type) === "income")
-    .reduce((sum, t) => sum + (t.amount || 0), 0);
-
-  const byCategoryMap: Record<string, number> = {};
-  transactions
-    .filter((t) => (t.kind || t.type) === "expense")
-    .forEach((t) => {
-      const key = `${t.category_id || t.category?.id || "sin"}`;
-      byCategoryMap[key] = (byCategoryMap[key] || 0) + (t.amount || 0);
-    });
-
-  const byCategory = Object.entries(byCategoryMap).map(([key, total]) => {
-    const cat = cats.find((c) => `${c.id}` === key);
-    return { name: cat?.name || "Sin categoria", total };
-  });
-
-  return {
-    summary: {
-      incomes,
-      expenses,
-      balance: incomes - expenses,
-      byCategory: byCategory.map((item) => ({
-        category: item.name,
-        total: item.total,
-      })),
-    },
-    byCategory,
-  };
-};
-
-const Card: React.FC<{ title: string; value: string }> = ({ title, value }) => (
-  <div
-    style={{
-      background: "#020617",
-      borderRadius: 16,
-      padding: 16,
-      border: "1px solid #1f2937",
-      boxShadow: "0 10px 25px rgba(0,0,0,0.4)",
-    }}
-  >
-    <div style={{ fontSize: 13, color: "#9ca3af" }}>{title}</div>
-    <div style={{ fontSize: 22, marginTop: 6 }}>{value}</div>
-  </div>
-);
-
-export default DashboardPage;
+}
